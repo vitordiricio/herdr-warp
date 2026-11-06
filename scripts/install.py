@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Build the Warp customization from a pinned, separately obtained Noctua source."""
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+from urllib.request import urlopen
+
+from style import PARTS, apply, apply_titles
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_json(path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def obtain_source(metadata, destination, local=None):
+    """Read only the allowlisted regular files, verifying every input hash."""
+    archive = None
+    if local is None:
+        url = (f"https://codeload.github.com/{metadata['repository']}/tar.gz/"
+               f"{metadata['revision']}")
+        print(f"Obtendo Noctua: {metadata['revision']}")
+        with urlopen(url, timeout=60) as response:
+            data = response.read(32 * 1024 * 1024 + 1)
+        if len(data) > 32 * 1024 * 1024:
+            raise ValueError("O arquivo de dependência excede o limite de tamanho.")
+        archive = tarfile.open(fileobj=io.BytesIO(data), mode="r:gz")
+    try:
+        for relative, expected in metadata["files"].items():
+            if Path(relative).is_absolute() or ".." in Path(relative).parts:
+                raise ValueError(f"Caminho inválido: {relative}")
+            if local is not None:
+                source = local / relative
+                if source.is_symlink() or not source.is_file():
+                    raise ValueError(f"Dependência ausente ou inválida: {relative}")
+                payload = source.read_bytes()
+            else:
+                prefix = f"noctua-layout-{metadata['revision']}/"
+                member = archive.getmember(prefix + relative)
+                if not member.isfile() or member.size > 4 * 1024 * 1024:
+                    raise ValueError(f"Entrada inválida: {relative}")
+                with archive.extractfile(member) as stream:
+                    payload = stream.read()
+            if hashlib.sha256(payload).hexdigest() != expected:
+                raise ValueError(f"Noctua não corresponde à revisão esperada: {relative}")
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+    finally:
+        if archive is not None:
+            archive.close()
+
+
+def node(tree, identifier):
+    if tree.get("id") == identifier:
+        return tree
+    for child in tree.get("children", []):
+        result = node(child, identifier)
+        if result is not None:
+            return result
+    return None
+
+
+def make_layout(source, version):
+    tree = load_json(source / "layouts/noctua.json")
+    tree = json.loads(json.dumps(tree).replace('"noctua-', '"warp-'))
+    tree.update(cloned_from={"name": "noctua", "version": version},
+                theme="warp-gruvbox", font="JetBrainsMono Nerd Font", font_size=13,
+                terminal_opacity=0.84, ui_font="Roboto", preview="layouts/warp-gruvbox.svg")
+    for identifier, pixels in {"sidebar": 248, "brand": 68, "tabs": 36,
+                               "sidebar-footer": 32, "status": 24}.items():
+        node(tree, identifier)["size"] = {"px": pixels}
+    node(tree, "work-body")["gap"] = 4
+    node(tree, "status")["hidden"] = True
+    pane = node(tree, "main")["content"]["pane"]
+    pane.update(gap=4, radius=4, background="canvas", lone=False,
+                border={"width": 1, "color": "border"},
+                focus={"width": 1, "color": "border"})
+    pane["header"].update(height=24, reveal="hover")
+    return tree
+
+
+def build(source, output, metadata):
+    for part in PARTS:
+        original = source / "mods" / f"noctua-{part}"
+        target = output / "mods" / f"warp-{part}"
+        shutil.copytree(original, target)
+        manifest = load_json(target / "mod.json")
+        manifest["cloned_from"] = {"name": f"noctua-{part}",
+                                   "version": metadata["herdr_version"]}
+        write_json(target / "mod.json", manifest)
+    apply(output, ROOT / "assets/warp")
+    apply_titles(output)
+    shutil.copy2(ROOT / "licenses/Warp-MIT.txt",
+                 output / "mods/warp-chrome/LICENSE-Warp-MIT.txt")
+    shutil.copytree(ROOT / "fonts", output / "fonts")
+    shutil.copytree(ROOT / "themes", output / "themes")
+    shutil.copytree(ROOT / "licenses", output / "licenses/herdr-warp")
+    write_json(output / "layouts/warp-gruvbox.json",
+               make_layout(source, metadata["herdr_version"]))
+    shutil.copy2(ROOT / "layouts/warp-gruvbox.svg", output / "layouts/warp-gruvbox.svg")
+
+
+def prepare_keys(home, output):
+    path = home / "keys.json"
+    keys = load_json(path) if path.exists() else {}
+    if not isinstance(keys, dict) or not isinstance(keys.get("terminal", {}), dict):
+        raise ValueError("keys.json precisa conter um objeto e uma seção terminal válida.")
+    keys.setdefault("terminal", {})["ctrl-v"] = "terminal.paste"
+    write_json(output / "keys.json", keys)
+
+
+def install(output, home, dry_run=False):
+    files = sorted(path for path in output.rglob("*") if path.is_file())
+    for path in files:
+        target = home / path.relative_to(output)
+        if target.is_symlink() or any(parent.is_symlink() for parent in target.parents
+                                      if parent != home.parent and home in parent.parents):
+            raise ValueError(f"Destino contém link simbólico: {target}")
+        if target.exists() and not target.is_file():
+            raise ValueError(f"Destino não é um arquivo: {target}")
+    if dry_run:
+        print(f"Dry run: {len(files)} arquivos seriam instalados em {home}:")
+        for path in files:
+            print(f"  {path.relative_to(output)}")
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    backup = home / "backups" / f"herdr-warp-{stamp}"
+    backup.mkdir(parents=True)
+    manifest = {"home": str(home), "previous": [], "new": []}
+    # Complete the backup before changing any destination file.
+    for path in files:
+        relative = path.relative_to(output)
+        target = home / relative
+        if target.exists():
+            saved = backup / relative
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(target, saved)
+            manifest["previous"].append(str(relative))
+        else:
+            manifest["new"].append(str(relative))
+    write_json(backup / "manifest.json", manifest)
+    for path in files:
+        target = home / path.relative_to(output)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Atomic replacement of each file avoids partial reads by Herdr's watcher.
+        with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".herdr-warp-",
+                                         delete=False) as temporary:
+            temporary.write(path.read_bytes())
+            temporary_path = Path(temporary.name)
+        temporary_path.chmod(0o644)
+        temporary_path.replace(target)
+    print(f"Instalados {len(files)} arquivos em {home}")
+    print(f"Backup: {backup}")
+    return backup
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--home", type=Path,
+                        default=Path(os.environ.get("HERDR_APP_HOME", "~/.config/herdr-app")).expanduser())
+    parser.add_argument("--noctua-source", type=Path, help="Cópia local da revisão Noctua fixada")
+    parser.add_argument("--dry-run", action="store_true", help="Validar e listar sem alterar o destino")
+    parser.add_argument("--ctrl-v", action="store_true", help="Mesclar somente Ctrl+V → colar em keys.json")
+    parser.add_argument("--activate", action="store_true", help="Ativar o layout após instalar")
+    args = parser.parse_args()
+    args.home = args.home.expanduser().resolve()
+    if args.activate and not args.dry_run and not shutil.which("herdr-app"):
+        parser.error("--activate requer herdr-app no PATH e uma janela aberta.")
+    metadata = load_json(ROOT / "upstream.json")
+    with tempfile.TemporaryDirectory(prefix="herdr-warp-") as directory:
+        work = Path(directory)
+        source, output = work / "source", work / "output"
+        obtain_source(metadata, source, args.noctua_source)
+        build(source, output, metadata)
+        if args.ctrl_v:
+            prepare_keys(args.home, output)
+        install(output, args.home, args.dry_run)
+    if args.activate and not args.dry_run:
+        environment = dict(os.environ, HERDR_APP_HOME=str(args.home))
+        subprocess.run(["herdr-app", "do", "layout.switch", "--name", "warp-gruvbox"],
+                       env=environment, check=True)
+    elif not args.dry_run:
+        print("Para ativar: herdr-app do layout.switch --name warp-gruvbox")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, KeyError, tarfile.TarError, subprocess.CalledProcessError) as error:
+        sys.exit(f"Erro: {error}")
