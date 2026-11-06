@@ -10,6 +10,7 @@ Os scripts, a ilustração e a documentação originais de herdr-warp estão sob
 - Revisão: `f42f701e85c3e99b04eca721a240144f8f67c9ef`.
 - Autor: othavi0.
 - A revisão não contém uma licença geral declarada. Os mods completos não são redistribuídos neste repositório; o instalador obtém os arquivos necessários diretamente da origem e aplica a personalização localmente.
+- Obter a dependência na instalação não concede permissões adicionais. A licença/permissão dos acréscimos específicos do Noctua continua pendente; esta receita não deve ser interpretada como uma regularização desses direitos. Créditos e semelhança com o Herdr não substituem a autorização do autor sobre suas contribuições próprias.
 - As chaves de estado `noctua.*` foram mantidas para preservar a compatibilidade dos componentes. A paleta de espaços e sua lógica são do Noctua, inspiradas em Sanzo Wada; a estrutura original também cita T3 Code.
 
 ## Herdr
@@ -20,7 +21,9 @@ https://github.com/herdrdev/herdr-app — Apache-2.0. O Noctua se baseia nos mod
 
 https://github.com/warpdotdev/warp — revisão de referência `f7fc2f2a08a3aa446baa23960710e630c5defd6e`.
 
-Os SVGs `assets/warp/terminal.svg` e `assets/warp/folder.svg` vêm de `app/assets/bundled/svg/`. São redistribuídos com o aviso [MIT do Warp](licenses/Warp-MIT.txt), copyright 2020–2026 Denver Technologies, Inc.
+Os SVGs `assets/warp/terminal.svg` e `assets/warp/folder.svg` vêm de `app/assets/bundled/svg/`. O [README do Warp nessa revisão](https://github.com/warpdotdev/warp/blob/f7fc2f2a08a3aa446baa23960710e630c5defd6e/README.md#licensing) reserva MIT aos crates `warpui_core` e `warpui` e declara AGPLv3 para o restante do repositório. Por isso, os dois SVGs são acompanhados pela [licença AGPLv3 do Warp](licenses/Warp-AGPL-3.0.txt), copyright 2020–2026 Denver Technologies, Inc. Os próprios SVGs, em formato-fonte, estão incluídos no repositório; não foram modificados.
+
+A atribuição anterior desses SVGs à MIT estava incorreta e foi corrigida. A MIT da camada de personalização não altera a licença dos SVGs.
 
 As medidas e proporções da interface foram estudadas principalmente em:
 
@@ -38,5 +41,7 @@ Os arquivos em `fonts/` são as fontes originais distribuídas pelo Warp em `app
 - Os demais ícones dos mods são obtidos com o Noctua e derivam do Lucide e Feather. Os avisos ISC/MIT estão em [`licenses/Lucide.txt`](licenses/Lucide.txt).
 - Gruvbox: esquema de cores criado por [morhetz](https://github.com/morhetz/gruvbox), usado aqui conforme a aparência Gruvbox Dark do Warp e a configuração do Ghostty.
 - JetBrainsMono Nerd Font é um requisito externo, sem binários distribuídos neste repositório.
+- `customizations/mods/warp-chrome/detailed-view.svg` e `agents-toggle.svg` são ícones originais desta personalização, sob MIT.
+- O script de título do Antigravity em `integrations/antigravity/` é original desta personalização, sob MIT. Usa o campo `conversation_title` documentado pelo CLI; não inclui código, credenciais ou histórico do Antigravity.
 
 Os nomes e marcas identificam suas origens. Este projeto independente não é endossado pelo Herdr, Warp, Noctua ou pelos autores das fontes e ícones.

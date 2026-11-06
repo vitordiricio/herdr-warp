@@ -12,6 +12,10 @@ O projeto mantém o modelo do Herdr: **spaces na sidebar, abas no topo e splits 
 - Roboto na interface, títulos de 12 px e subtítulos de 10 px, com altura de linha 1.2.
 - Sidebar de 248 px, ícones circulares de 24 px e ajustes de espaçamento e alinhamento.
 - Nome do space na primeira linha; título da aba ativa na segunda.
+- Toggle **Detailed view** à esquerda do botão de recolher a sidebar: spaces em acordeões, abas agrupadas e splits em linhas verticais com seus ícones.
+- Conectores arredondados, recuo reduzido e marcadores verticais de tamanho fixo: discretos nas abas inativas e laranja na selecionada, sem contorno retangular.
+- Nomes de sessão nas linhas detalhadas e em Agents/Idle. Em Agents, o título é o space; o subtítulo só aparece quando há nome de sessão, sem numeração automática.
+- Toggle ao lado de **Machines** para mostrar ou ocultar Agents e Idle juntos e liberar altura para os spaces.
 - Terminais ociosos mostram o shell, como `bash` ou `zsh`, em vez de endereços como `t1`. Programas ativos e nomes manuais continuam respeitados.
 - Terminal com JetBrainsMono Nerd Font, tamanho-base 13, padding `[14, 12]` e opacidade interna de 84%.
 - Barra inferior de pasta/branch da área do terminal oculta.
@@ -64,7 +68,9 @@ herdr-app do app.zoom_reset
 
 Não é um fork do binário do Herdr. O instalador obtém a revisão do Noctua registrada em [`upstream.json`](upstream.json), confere os hashes dos arquivos necessários, cria cópias `warp-*` e aplica as transformações de [`scripts/style.py`](scripts/style.py). A revisão está fixada para que mudanças futuras do Noctua não alterem o resultado silenciosamente.
 
-O Noctua não declara uma licença de redistribuição nessa revisão. Por isso, seus mods completos não são incluídos neste repositório: o original é obtido diretamente do projeto durante a instalação. As licenças dos recursos redistribuídos e os créditos estão em [THIRD_PARTY.md](THIRD_PARTY.md).
+O Noctua não declara uma licença geral nessa revisão. Seus mods completos não são incluídos neste repositório: o original é obtido diretamente do projeto durante a instalação. **Esse download separado não concede permissões adicionais nem resolve a ausência de licença para os acréscimos específicos do Noctua.** Essa pendência permanece; os trechos herdados do Herdr e os recursos de terceiros mantêm suas respectivas licenças. Veja [THIRD_PARTY.md](THIRD_PARTY.md).
+
+As mudanças posteriores à base visual estão em [`customizations/mods.json`](customizations/mods.json), como transformações por linhas com hashes de entrada e saída, e em `customizations/mods/`, com os helpers e ícones próprios. O instalador valida os hashes e gera os oito mods completos somente no destino de instalação.
 
 Para instalar usando uma cópia local da revisão esperada:
 
@@ -79,6 +85,16 @@ git -C /tmp/noctua-layout checkout f42f701e85c3e99b04eca721a240144f8f67c9ef
 Sessões, terminais em execução, nomes dos seus spaces, histórico, diretórios de projetos, credenciais, estado de painéis e configurações pessoais não fazem parte do pacote. `settings.json`, `view.json`, `shared.json` e `data/` não são publicados nem copiados do computador de origem.
 
 O código dos mods mantém as funções do Noctua: consultas Git para branches e mudanças; leitura de arquivos em Files; e ações de commit em Changes quando acionadas pelo usuário. O download das dependências acontece no instalador; esta personalização não adiciona chamadas de rede aos mods.
+
+## Controles e nomes de sessão
+
+O botão ao lado de recolher a sidebar alterna a visão compacta/detalhada. Na visão detalhada, o chevron do space recolhe suas abas. Cada ramo corresponde a uma aba real; seus painéis aparecem um abaixo do outro. Clicar num painel seleciona seu space e sua aba e revela a composição completa, desfazendo um eventual zoom de painel. Menus, splits e ações continuam disponíveis.
+
+O botão de agente, à direita de Machines no rodapé, mostra/oculta Agents e Idle juntos. O Herdr persiste essa visibilidade com suas APIs nativas. O modo detalhado e os acordeões usam as chaves `warp.sidebar.detailed` e `warp.sidebar.details-closed`; os valores pessoais dessas preferências não são distribuídos.
+
+Nomes manuais de abas têm prioridade. As sessões sem nome usam o nome do programa nas abas e apenas o space em Agents. Para o nome interno de um CLI aparecer, ele precisa publicá-lo como título do terminal. Há instruções para Codex e um instalador opcional para Antigravity em [integrations/README.md](integrations/README.md). A instalação principal não modifica configurações dos CLIs.
+
+As notificações nativas do Herdr mantêm o comportamento original.
 
 ## Limites e reversão
 
@@ -96,8 +112,10 @@ Para desfazer substituições de arquivos, restaure os caminhos listados em `pre
 
 ```sh
 python3 -m unittest discover -s tests -v
+# Opcional, com Node.js para validar os helpers puros de navegação e nomes:
+node --test tests/sidebar.test.mjs
 ```
 
 Depois de instalar num destino de teste, valide os mods com `herdr-app check <destino>/mods/warp-<nome>`. Os oito mods e a geração do layout foram comparados com a configuração de referência e validados no Herdr 0.1.13. Os testes do instalador verificam preservação de atalhos, backup, dry run e rejeição de dependências incompatíveis.
 
-Contribuições à camada de personalização estão sob MIT; os componentes de terceiros mantêm suas próprias licenças.
+Contribuições originais à camada de personalização estão sob MIT. Os dois SVGs provenientes de `app/assets` do Warp estão sob AGPLv3, e Roboto sob OFL 1.1; esses recursos não são relicenciados pela MIT deste projeto. A ausência de licença geral do Noctua permanece documentada.

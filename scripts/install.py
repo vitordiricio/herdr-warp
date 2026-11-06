@@ -16,6 +16,7 @@ import tempfile
 from urllib.request import urlopen
 
 from style import PARTS, apply, apply_titles
+from customize import apply_customizations
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -107,8 +108,9 @@ def build(source, output, metadata):
         write_json(target / "mod.json", manifest)
     apply(output, ROOT / "assets/warp")
     apply_titles(output)
-    shutil.copy2(ROOT / "licenses/Warp-MIT.txt",
-                 output / "mods/warp-chrome/LICENSE-Warp-MIT.txt")
+    apply_customizations(output, ROOT)
+    shutil.copy2(ROOT / "licenses/Warp-AGPL-3.0.txt",
+                 output / "mods/warp-chrome/LICENSE-Warp-AGPL-3.0.txt")
     shutil.copytree(ROOT / "fonts", output / "fonts")
     shutil.copytree(ROOT / "themes", output / "themes")
     shutil.copytree(ROOT / "licenses", output / "licenses/herdr-warp")

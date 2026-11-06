@@ -1,0 +1,140 @@
+[
+  {
+    "path": "mods/warp-chrome/main.js",
+    "base_sha256": "fff53f6cfc0afce434e569083b5cd5c97acaa6ca7cb626c0eae710571fcf0f92",
+    "result_sha256": "6f8d658dd63fc1ead418496c97868fb33aaff847874c342b6de91ae8d5ee73d3",
+    "edits": [
+      {
+        "start": 9,
+        "end": 10,
+        "text": "import { theme, run, props, window, shared, setShared, updates, layout, keys, settings, spaces, nextCommand } from \"herdr\";\n"
+      },
+      {
+        "start": 13,
+        "end": 13,
+        "text": "const DETAILS = \"warp.sidebar.detailed\";\n"
+      },
+      {
+        "start": 49,
+        "end": 49,
+        "text": "  init(_props, cx) {\n    if (_props?.footer) return;\n    cx.spawn(async cx => {\n      for (;;) {\n        const command = await nextCommand();\n        if (command === \"toggle-details\") this.toggleDetails();\n        else if (command === \"detailed-on\") setShared(DETAILS, true);\n        else if (command === \"detailed-off\") setShared(DETAILS, false);\n      }\n    });\n  }\n\n  toggleDetails() {\n    setShared(DETAILS, shared(DETAILS) !== true);\n  }\n\n  detailsButton(t) {\n    const on = shared(DETAILS) === true;\n    return this.button(\"detailed-view-toggle\", \"detailed-view\", () => this.toggleDetails(), {\n      size: 24, icon: 14, color: on ? t.foreground : t.dim,\n      tip: on ? \"Compact view\" : \"Detailed view\",\n    }).when(on, el => el.bg(t.raised));\n  }\n\n  agentsButton(t) {\n    const on = !find(layout(), \"agents\")?.hidden;\n    return this.button(\"agents-view-toggle\", \"agents-toggle\", () => run(\"layout.toggle\", { id: \"agents\" }), {\n      size: 24, icon: 16, color: on ? t.foreground : t.dim,\n      tip: on ? \"Hide Agents and Idle\" : \"Show Agents and Idle\",\n    }).when(on, el => el.bg(t.raised));\n  }\n\n"
+      },
+      {
+        "start": 71,
+        "end": 71,
+        "text": "      .when(Boolean(find(layout(), \"agents\")), el => el.child(this.agentsButton(t)))\n"
+      },
+      {
+        "start": 101,
+        "end": 102,
+        "text": "      .child(h_flex().flex_none().gap(2).items_center()\n        .child(this.detailsButton(t))\n        .child(this.button(\"sidebar-toggle\", \"sidebar\", toggleSidebar, { tip: \"Hide sidebar\" })));\n"
+      }
+    ]
+  },
+  {
+    "path": "mods/warp-spaces/main.js",
+    "base_sha256": "380410fa6a48883f9ad50de6e26fe458f5335893e75256111bf5e82abccd1310",
+    "result_sha256": "d805d6eec4c4d396431484c6ca9d7a0f48b336e5b15b07fc933525f0d71c8f32",
+    "edits": [
+      {
+        "start": 10,
+        "end": 11,
+        "text": "import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, settings, nextCommand } from \"herdr\";\nimport { DETAILS, CLOSED_DETAILS, tabGroups, panelLabel, focusPanel } from \"./details.js\";\n"
+      },
+      {
+        "start": 188,
+        "end": 188,
+        "text": "    cx.spawn(async cx => {\n      for (;;) {\n        const command = await nextCommand();\n        if (command.startsWith(\"toggle-details:\")) this.toggleDetails(command.slice(\"toggle-details:\".length), cx);\n        else if (command.startsWith(\"open-pane:\")) {\n          const pane = panes().find(p => p.pane === command.slice(\"open-pane:\".length));\n          if (pane) this.openPanel(pane);\n        }\n      }\n    });\n"
+      },
+      {
+        "start": 402,
+        "end": 402,
+        "text": "    const detailed = shared(DETAILS) === true;\n    const closedDetails = new Set(Array.isArray(shared(CLOSED_DETAILS)) ? shared(CLOSED_DETAILS) : []);\n    const addDetails = (out, space) => {\n      if (!detailed || closedDetails.has(space.id)) return;\n      const tabs = tabGroups(space, ps);\n      for (const [index, group] of tabs.entries()) {\n        const h = 14 + Math.max(1, group.panes.length) * 26 + (group.tab.named && group.panes.length > 1 ? 16 : 0);\n        out.push({ key: `details-${group.tab.id}`, h, el: () => this.tabDetails(space, group, ps, t, h, index === tabs.length - 1) });\n      }\n    };\n"
+      },
+      {
+        "start": 406,
+        "end": 406,
+        "text": "      addDetails(out, head.w);\n"
+      },
+      {
+        "start": 407,
+        "end": 408,
+        "text": "      for (const r of trees) {\n        out.push({ key: `tree-${r.w.id}`, h: H.tree, el: () => this.worktree(r, t) });\n        addDetails(out, r.w);\n      }\n"
+      },
+      {
+        "start": 459,
+        "end": 460,
+        "text": "  // Line 2 follows the tab bar: manual name, idle shell, then meaningful live title.\n"
+      },
+      {
+        "start": 470,
+        "end": 470,
+        "text": "  }\n\n  toggleDetails(id, cx) {\n    if (!spaces().some(space => space.id === id)) return;\n    const closed = new Set(Array.isArray(shared(CLOSED_DETAILS)) ? shared(CLOSED_DETAILS) : []);\n    closed.has(id) ? closed.delete(id) : closed.add(id);\n    setShared(CLOSED_DETAILS, [...closed]);\n    cx.notify();\n  }\n\n  detailsChevron(space, t) {\n    const closed = shared(CLOSED_DETAILS);\n    const open = !(Array.isArray(closed) && closed.includes(space.id));\n    return div().id(`details-fold-${space.id}`).size(16).flex_none().flex().items_center().justify_center().rounded(R)\n      .text_color(t.dim).hover(s => s.bg(t.input).text_color(t.foreground))\n      .tooltip(open ? \"Collapse terminals\" : \"Expand terminals\")\n      .on_mouse_down(\"left\", (_e, cx) => cx.stop_propagation())\n      .on_mouse_up(\"left\", (_e, cx) => cx.stop_propagation())\n      .on_click((_e, cx) => { cx.stop_propagation(); this.toggleDetails(space.id, cx); })\n      .child(svg(`${ICONS}/chevron-${open ? \"down\" : \"right\"}.svg`).size(10));\n  }\n\n  openPanel(pane) {\n    focusPanel(pane, panes(), run);\n  }\n\n  tabDetails(space, group, allPanes, t, height, last) {\n    const { tab, panes: panels } = group;\n    const on = space.active && tab.active;\n    const stop = (_e, cx) => cx.stop_propagation();\n    const glyph = pane => {\n      const program = pane.program;\n      if (program?.icon) return program.tint\n        ? svg(program.icon).size(14).text_color(t.muted)\n        : image(program.icon).size(14);\n      return svg(`${ICONS}/${pane.terminal ? \"terminal\" : \"file-text\"}.svg`).size(14).text_color(t.muted);\n    };\n    // One rounded branch per tab; its short marker never stretches with splits.\n    const join = (height - 8) / 2;\n    const ink = mix(t.foreground, 0.16, t.chrome);\n    return div().relative().h(height).pl(32).pr(8).pb(8)\n      .child(div().absolute().left(22).top(-4).w(1).h(last ? join : height + 4).bg(ink))\n      .child(div().absolute().left(22).top(join - 4).w(10).h(4)\n        .border_l(1).border_b(1).border_color(ink).rounded_bl(4))\n      .child(v_flex().id(`details-tab-${tab.id}`).relative().h_full().min_w(0).py(3).px(3).rounded(R)\n        .when(on, el => el.bg(t.raised))\n        .when(!on, el => el.bg(mix(t.foreground, 0.025, t.chrome)).hover(s => s.bg(t.hover)))\n        .child(div().absolute().left(0).top(join - 11).w(2).h(22).rounded_full().bg(on ? t.accent : ink))\n        .on_mouse_down(\"left\", stop)\n        .on_mouse_up(\"left\", stop)\n        .on_click(() => {\n          const zoomed = panels.find(pane => pane.zoomed);\n          if (zoomed) run(\"pane.zoom\", { pane: zoomed.pane });\n          run(\"tab.select\", { id: tab.id });\n        })\n        .on_mouse_down(\"right\", (_e, cx) => {\n          cx.stop_propagation();\n          openOverlay({ mod: \"menu\", kind: \"popup\", width: 200, props: { tab: \"tab\", target: { id: tab.id, space: space.id } } });\n        })\n        .when(tab.named && panels.length > 1, el => el.child(div().h(16).px(5).min_w(0).truncate().text_size(10).text_color(t.muted).tooltip(tab.name).child(tab.name)))\n        .children(panels.map(pane => {\n          const label = panelLabel(pane, tab, panels.length);\n          const focused = on && pane.focused;\n          const tip = [label, pane.title !== label && pane.title, pane.cwd].filter(Boolean).join(\"\\n\");\n          return h_flex().id(`details-pane-${pane.pane}`).h(26).flex_none().min_w(0).px(5).gap(7).items_center().rounded(R)\n            .text_size(12).text_color(focused ? t.foreground : t.muted)\n            .when(focused, el => el.bg(t.selected))\n            .hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip(tip)\n            .on_mouse_down(\"left\", stop).on_mouse_up(\"left\", stop)\n            .on_click((_e, cx) => { cx.stop_propagation(); this.openPanel(pane); })\n            .child(h_flex().size(16).flex_none().items_center().justify_center().child(glyph(pane)))\n            .child(div().flex_1().min_w(0).truncate().child(label))\n            .when(Boolean(pane.status) && pane.status !== \"idle\", el => el.child(dot(t, pane.status, 7, 9)));\n        }))\n        .when(panels.length === 0, el => el.child(h_flex().h(26).px(5).gap(7).items_center().text_size(12).text_color(t.dim)\n          .child(svg(`${ICONS}/terminal.svg`).size(14)).child(tab.named ? tab.name : \"Terminal\"))));\n"
+      },
+      {
+        "start": 543,
+        "end": 543,
+        "text": "      .when(shared(DETAILS) === true, el => el.child(this.detailsChevron(w, t)))\n"
+      },
+      {
+        "start": 570,
+        "end": 573,
+        "text": "  // A11: workspace name above, active tab title below; all existing controls stay.\n"
+      },
+      {
+        "start": 607,
+        "end": 608,
+        "text": "            .text_color(t[STATES[since.st].tone]).child(since.text)))\n          .when(shared(DETAILS) === true, el => el.child(this.detailsChevron(w, t))))\n"
+      }
+    ]
+  },
+  {
+    "path": "mods/warp-agents/main.js",
+    "base_sha256": "1f524dbed9e8e37e12d9a3e9b6a600dc8ba509aec0167cca6267042a8de144d7",
+    "result_sha256": "189c226a9c36f25a5fd179b56c94811239c0e7d9fd65a7593a27fea05286a7df",
+    "edits": [
+      {
+        "start": 9,
+        "end": 9,
+        "text": "import { sessionName } from \"./session-name.js\";\n"
+      },
+      {
+        "start": 51,
+        "end": 64,
+        "text": ""
+      },
+      {
+        "start": 296,
+        "end": 310,
+        "text": "    // Every row identifies its space; only an actual session name adds a subtitle.\n    // Resolve each agent independently, including agents sharing a split tab.\n    const tabs = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, tab]));\n    const detail = new Map(list.map(a => [a.address, sessionName(tabs.get(a.tab), a)]));\n"
+      },
+      {
+        "start": 336,
+        "end": 340,
+        "text": "      const name = a.space_name || \"Space\";\n"
+      },
+      {
+        "start": 343,
+        "end": 344,
+        "text": "        .h(more ? 44 : 36)\n"
+      },
+      {
+        "start": 365,
+        "end": 366,
+        "text": "          .when(Boolean(more), el => el.child(div().min_w(0).truncate().text_size(10).text_color(t.muted).tooltip(more).child(more))))\n"
+      }
+    ]
+  },
+  {
+    "path": "mods/warp-tabs/main.js",
+    "base_sha256": "3839e5eb14ef4fc8ff97019e49ddf958c5665bffcc90c8d9bafbec9f8c3ffe5e",
+    "result_sha256": "9824e05bbc99657b10608fec8bccc89c9c1f72287a2b3eb62e4646dcb4a57339",
+    "edits": [
+      {
+        "start": 37,
+        "end": 40,
+        "text": "// Same rule as the space card's second line: manual name, idle shell, live title.\n// Terminal addresses, paths and user@host fall back to the detected program.\n"
+      }
+    ]
+  }
+]
