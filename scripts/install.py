@@ -9,11 +9,17 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
 from urllib.request import urlopen
+
+try:
+    import tomllib
+except ImportError:
+    sys.exit("Erro: o instalador requer Python 3.11 ou posterior para validar TOML.")
 
 from style import PARTS, apply, apply_titles
 from customize import apply_customizations
@@ -128,23 +134,72 @@ def prepare_keys(home, output):
     write_json(output / "keys.json", keys)
 
 
-def install(output, home, dry_run=False):
+def disable_notes(text):
+    """Change only the root notes boolean, preserving the rest of the TOML text."""
+    import re
+
+    original = tomllib.loads(text)
+    if "notes" in original and type(original["notes"]) is not bool:
+        raise ValueError("herdr-core/config.toml: notes precisa ser true ou false.")
+    if original.get("notes") is False:
+        return text
+    expected = dict(original, notes=False)
+    if "notes" not in original:
+        result = "notes = false\n" + text
+        if tomllib.loads(result) == expected:
+            return result
+    else:
+        # Validate each candidate against the whole document: assignments inside
+        # tables or multiline strings must never be mistaken for the root key.
+        pattern = r"(?m)^([^\r\n]*?=[ \t]*)true(?=[ \t]*(?:#[^\r\n]*)?\r?$)"
+        for match in re.finditer(pattern, text):
+            try:
+                if tomllib.loads(match.group(1) + "true") != {"notes": True}:
+                    continue
+                start = match.end() - len("true")
+                result = text[:start] + "false" + text[match.end():]
+                if tomllib.loads(result) == expected:
+                    return result
+            except tomllib.TOMLDecodeError:
+                continue
+    raise ValueError("Não foi possível alterar somente notes em herdr-core/config.toml.")
+
+
+def check_target(target, home):
+    if target.is_symlink() or any(parent.is_symlink() for parent in target.parents
+                                  if parent != home.parent and home in parent.parents):
+        raise ValueError(f"Destino contém link simbólico: {target}")
+    if target.exists() and not target.is_file():
+        raise ValueError(f"Destino não é um arquivo: {target}")
+
+
+def install(output, home, dry_run=False, core_home=None):
     files = sorted(path for path in output.rglob("*") if path.is_file())
     for path in files:
         target = home / path.relative_to(output)
-        if target.is_symlink() or any(parent.is_symlink() for parent in target.parents
-                                      if parent != home.parent and home in parent.parents):
-            raise ValueError(f"Destino contém link simbólico: {target}")
-        if target.exists() and not target.is_file():
-            raise ValueError(f"Destino não é um arquivo: {target}")
+        check_target(target, home)
+    core = None
+    if core_home is not None:
+        core_path = core_home / "config.toml"
+        if any(parent.is_symlink() for parent in (core_path, *core_path.parents)):
+            raise ValueError(f"Destino contém link simbólico: {core_path}")
+        check_target(core_path, core_home)
+        previous = core_path.read_bytes() if core_path.exists() else b""
+        updated = disable_notes(previous.decode("utf-8")).encode("utf-8")
+        if updated != previous:
+            mode = stat.S_IMODE(core_path.stat().st_mode) if core_path.exists() else 0o600
+            core = (core_path, updated, mode)
     if dry_run:
         print(f"Dry run: {len(files)} arquivos seriam instalados em {home}:")
         for path in files:
             print(f"  {path.relative_to(output)}")
+        if core_home is not None:
+            action = "definir notes = false" if core else "notes já está false; preservar"
+            print(f"Core: {core_home / 'config.toml'} — {action}")
         return None
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     backup = home / "backups" / f"herdr-warp-{stamp}"
-    backup.mkdir(parents=True)
+    backup.mkdir(parents=True, mode=0o700)
     manifest = {"home": str(home), "previous": [], "new": []}
     # Complete the backup before changing any destination file.
     for path in files:
@@ -157,19 +212,31 @@ def install(output, home, dry_run=False):
             manifest["previous"].append(str(relative))
         else:
             manifest["new"].append(str(relative))
+    if core:
+        core_path, payload, mode = core
+        saved = None
+        if core_path.exists():
+            saved = "core/config.toml"
+            (backup / "core").mkdir()
+            shutil.copy2(core_path, backup / saved)
+        manifest["core"] = {"path": str(core_path), "previous": saved}
     write_json(backup / "manifest.json", manifest)
-    for path in files:
-        target = home / path.relative_to(output)
+    writes = [(home / path.relative_to(output), path.read_bytes(), 0o644) for path in files]
+    if core:
+        writes.append(core)
+    for target, payload, mode in writes:
         target.parent.mkdir(parents=True, exist_ok=True)
         # Atomic replacement of each file avoids partial reads by Herdr's watcher.
         with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".herdr-warp-",
                                          delete=False) as temporary:
-            temporary.write(path.read_bytes())
+            temporary.write(payload)
             temporary_path = Path(temporary.name)
-        temporary_path.chmod(0o644)
+        temporary_path.chmod(mode)
         temporary_path.replace(target)
     print(f"Instalados {len(files)} arquivos em {home}")
     print(f"Backup: {backup}")
+    if core_home is not None:
+        print(f"Mensagens automáticas desativadas: {core_home / 'config.toml'} (notes = false)")
     return backup
 
 
@@ -177,12 +244,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path,
                         default=Path(os.environ.get("HERDR_APP_HOME", "~/.config/herdr-app")).expanduser())
+    parser.add_argument("--core-home", type=Path,
+                        default=Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser() / "herdr-core",
+                        help="Diretório do core para definir notes = false (padrão: XDG_CONFIG_HOME/herdr-core ou ~/.config/herdr-core)")
     parser.add_argument("--noctua-source", type=Path, help="Cópia local da revisão Noctua fixada")
     parser.add_argument("--dry-run", action="store_true", help="Validar e listar sem alterar o destino")
     parser.add_argument("--ctrl-v", action="store_true", help="Mesclar somente Ctrl+V → colar em keys.json")
     parser.add_argument("--activate", action="store_true", help="Ativar o layout após instalar")
     args = parser.parse_args()
     args.home = args.home.expanduser().resolve()
+    args.core_home = args.core_home.expanduser().absolute()
     if args.activate and not args.dry_run and not shutil.which("herdr-app"):
         parser.error("--activate requer herdr-app no PATH e uma janela aberta.")
     metadata = load_json(ROOT / "upstream.json")
@@ -193,7 +264,7 @@ def main():
         build(source, output, metadata)
         if args.ctrl_v:
             prepare_keys(args.home, output)
-        install(output, args.home, args.dry_run)
+        install(output, args.home, args.dry_run, core_home=args.core_home)
     if args.activate and not args.dry_run:
         environment = dict(os.environ, HERDR_APP_HOME=str(args.home))
         subprocess.run(["herdr-app", "do", "layout.switch", "--name", "warp-gruvbox"],

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-07 — mensagens automáticas do core
+
+- O instalador passa a definir `notes = false` em toda instalação, inclusive quando a configuração anterior está `true`.
+- Preserva outras opções, comentários e permissões do TOML; cria o arquivo se necessário e mantém inalterado quando já está desativado.
+- Backup da configuração anterior e destino do core registrados no manifesto, com dry run e opção `--core-home` para instalações isoladas.
+- Validação de TOML com a biblioteca padrão; Python mínimo atualizado para 3.11.
+- Testes de preservação, reinstalação, backup, permissões, dry run e rejeição de configuração inválida ou links simbólicos antes de gravar os destinos.
+
 ## 2026-11-06 — navegação detalhada e nomes de sessão
 
 - Visão detalhada com toggle, spaces em acordeões e abas agrupadas por seus splits, sempre com ícones.

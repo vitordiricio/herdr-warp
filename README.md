@@ -20,11 +20,12 @@ O projeto mantém o modelo do Herdr: **spaces na sidebar, abas no topo e splits 
 - Terminal com JetBrainsMono Nerd Font, tamanho-base 13, padding `[14, 12]` e opacidade interna de 84%.
 - Barra inferior de pasta/branch da área do terminal oculta.
 - Opção de usar **Ctrl+V para colar**, preservando os demais atalhos.
+- Mensagens automáticas do core desativadas com `notes = false`, preservando as outras configurações.
 
 ## Requisitos
 
 - Herdr app — validado com a versão **0.1.13 no Linux**.
-- Python **3.10 ou posterior**; o instalador usa somente a biblioteca padrão.
+- Python **3.11 ou posterior**; o instalador usa somente a biblioteca padrão, incluindo `tomllib` para validar a configuração do core.
 - `git` para clonar este projeto e para as funções de repositórios do Noctua.
 - **JetBrainsMono Nerd Font instalada no sistema**. Ela não está incluída; Roboto está incluída com sua licença.
 - Acesso à internet para obter a revisão fixada do Noctua. Uma cópia local também pode ser usada.
@@ -51,6 +52,12 @@ Para instalar também o ajuste de Ctrl+V:
 Por padrão, o destino é `${HERDR_APP_HOME:-~/.config/herdr-app}`. Também é possível usar `--home /caminho/para/herdr-app`. O instalador prepara tudo numa pasta temporária antes de escrever e cria um backup dos arquivos substituídos em `backups/herdr-warp-<data>/`, com um manifesto dos arquivos anteriores e novos.
 
 Ele instala `layouts/warp-gruvbox.*`, `themes/warp-gruvbox.json`, `mods/warp-*`, as fontes Roboto e os avisos de licença. Não altera os mods originais Noctua. O ajuste opcional de Ctrl+V mescla somente essa tecla na seção `terminal` de `keys.json`.
+
+Toda instalação também define `notes = false` em `${XDG_CONFIG_HOME:-~/.config}/herdr-core/config.toml`, mesmo se a opção estiver `true`. Se o arquivo ou a opção não existir, cria o necessário. Preserva as demais opções, comentários e permissões existentes; um arquivo que já tenha `notes = false` fica inalterado. TOML inválido interrompe a instalação antes de escrever nos destinos.
+
+Isso desativa avisos automáticos enviados aos agentes e as marcações `<hc …>` em mensagens. O envio explícito por `hc send`, a detecção de status e as notificações visuais continuam disponíveis. O instalador não reinicia o core nem os agentes.
+
+Para instalar em diretórios de teste ou usar outro core, informe **ambos os destinos**: `--home /caminho/herdr-app --core-home /caminho/herdr-core`. `--home` sozinho altera apenas o destino da interface; o caminho padrão do core continua sendo o descrito acima. `--dry-run` informa o ajuste do core sem criar ou modificar nenhum dos destinos.
 
 Se instalar sem `--activate`, ative depois:
 
@@ -108,6 +115,8 @@ herdr-app do layout.switch --name main
 
 Para desfazer substituições de arquivos, restaure os caminhos listados em `previous` no `manifest.json` do backup correspondente. A lista `new` identifica os arquivos que antes não existiam. Se usou `--ctrl-v`, a versão anterior de `keys.json`, quando existente, está nesse mesmo backup. Não restaure arquivos de outros backups sem conferir suas alterações posteriores.
 
+Quando a configuração do core muda, o manifesto também registra `core.path` (destino absoluto) e `core.previous`. Se `core.previous` for `core/config.toml`, esse arquivo do backup contém a configuração anterior e pode ser restaurado em `core.path`. Se for `null`, o arquivo não existia antes; confira alterações posteriores antes de removê-lo. Se `notes` já estava `false`, não há entrada `core`, pois o arquivo não foi alterado. Trocar somente o layout não reativa as mensagens automáticas.
+
 ## Desenvolvimento
 
 ```sh
@@ -116,6 +125,6 @@ python3 -m unittest discover -s tests -v
 node --test tests/sidebar.test.mjs
 ```
 
-Depois de instalar num destino de teste, valide os mods com `herdr-app check <destino>/mods/warp-<nome>`. Os oito mods e a geração do layout foram comparados com a configuração de referência e validados no Herdr 0.1.13. Os testes do instalador verificam preservação de atalhos, backup, dry run e rejeição de dependências incompatíveis.
+Depois de instalar num destino de teste, valide os mods com `herdr-app check <destino>/mods/warp-<nome>`. Os oito mods e a geração do layout foram comparados com a configuração de referência e validados no Herdr 0.1.13. Os testes do instalador verificam preservação de atalhos, backup, dry run, rejeição de dependências incompatíveis e alteração isolada de `notes`, incluindo comentários, seções TOML, permissões e reinstalação.
 
 Contribuições originais à camada de personalização estão sob MIT. Os dois SVGs provenientes de `app/assets` do Warp estão sob AGPLv3, e Roboto sob OFL 1.1; esses recursos não são relicenciados pela MIT deste projeto. A ausência de licença geral do Noctua permanece documentada.
